@@ -177,9 +177,14 @@ async def connect_to_mcp_server(access_token: str):
     print("\n=== Connecting to MCP Server ===")
     
     # Set up server parameters for stdio communication
+    import os
+    mcp_server_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "mcp-server", "main.py")
+    )
+    
     server_params = StdioServerParameters(
-        command="python",
-        args=["../mcp-server/main.py"],
+        command="uv",
+        args=["run", "--directory", os.path.dirname(mcp_server_path), "python", "main.py"],
         env=None,
     )
     
@@ -214,17 +219,6 @@ async def connect_to_mcp_server(access_token: str):
                 "auth_token": access_token
             })
             print(f"Result: {result.content}")
-            
-            # Get user profile resource
-            print("\n--- Getting user profile resource ---")
-            resources = await session.list_resources()
-            print(f"Available resources: {[r.uri for r in resources.resources]}")
-            
-            if resources.resources:
-                resource_result = await session.read_resource(
-                    resources.resources[0].uri
-                )
-                print(f"Resource content:\n{resource_result.contents[0].text if resource_result.contents else 'No content'}")
 
 
 async def main():

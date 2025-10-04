@@ -53,12 +53,6 @@ public_key_pem = public_key_obj.public_bytes(
     format=serialization.PublicFormat.SubjectPublicKeyInfo
 ).decode('utf-8')
 
-# Create JWK from public key
-public_jwk = jwk.RSAKey(algorithm=ALGORITHMS.RS256).to_dict()
-public_jwk['kid'] = 'default-key-id'
-public_jwk['use'] = 'sig'
-public_jwk['alg'] = 'RS256'
-
 app = FastAPI(title="Identity Provider", description="OAuth2/OIDC Identity Provider")
 
 

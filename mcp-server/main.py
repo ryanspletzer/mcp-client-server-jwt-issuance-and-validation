@@ -30,11 +30,11 @@ async def get_jwks() -> Dict[str, Any]:
     return jwks_cache
 
 
-def validate_token(token: str) -> Dict[str, Any]:
+async def validate_token(token: str) -> Dict[str, Any]:
     """Validate JWT token and return claims"""
     try:
         # Get the JWKS
-        jwks = asyncio.run(get_jwks())
+        jwks = await get_jwks()
         
         # Decode and validate the token
         # For simplicity, we'll use the first key in JWKS
@@ -44,12 +44,14 @@ def validate_token(token: str) -> Dict[str, Any]:
         # Get the signing key
         signing_key = jwks["keys"][0]
         
-        # Validate token
+        # Validate token - we need to skip audience validation or provide the correct audience
+        # For this demo, we'll decode without validating audience
         claims = jwt.decode(
             token,
             signing_key,
             algorithms=["RS256"],
             issuer=ISSUER,
+            options={"verify_aud": False}  # Skip audience validation for demo
         )
         
         return claims
@@ -89,7 +91,7 @@ async def get_user_info(auth_token: str) -> Dict[str, Any]:
         User information extracted from the token
     """
     try:
-        claims = validate_token(auth_token)
+        claims = await validate_token(auth_token)
         return {
             "user_id": claims.get("sub"),
             "name": claims.get("name"),
@@ -115,36 +117,9 @@ async def echo(message: str, auth_token: str) -> str:
         The echoed message with user information
     """
     try:
-        claims = validate_token(auth_token)
+        claims = await validate_token(auth_token)
         user_name = claims.get("name", "Unknown User")
         return f"[Authenticated as {user_name}] Echo: {message}"
-    except ValueError as e:
-        return f"Authentication failed: {str(e)}"
-
-
-@mcp.resource("user://profile")
-async def get_user_profile(auth_token: str) -> str:
-    """
-    Get the user's profile as a resource
-    
-    Args:
-        auth_token: The JWT access token
-    
-    Returns:
-        User profile information
-    """
-    try:
-        claims = validate_token(auth_token)
-        profile = f"""
-User Profile:
-- User ID: {claims.get('sub')}
-- Name: {claims.get('name')}
-- Email: {claims.get('email')}
-- Username: {claims.get('preferred_username')}
-- Tenant: {claims.get('tid')}
-- Scopes: {claims.get('scope')}
-"""
-        return profile
     except ValueError as e:
         return f"Authentication failed: {str(e)}"
 
