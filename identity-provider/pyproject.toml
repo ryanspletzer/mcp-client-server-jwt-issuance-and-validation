@@ -1,0 +1,12 @@
+[project]
+name = "identity-provider"
+version = "0.1.0"
+description = "OAuth2/OIDC Identity Provider emulating Entra ID"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+    "python-jose[cryptography]>=3.3.0",
+    "python-multipart>=0.0.6",
+    "pydantic>=2.10.0",
+]
