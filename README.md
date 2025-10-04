@@ -102,9 +102,26 @@ cd mcp-client
 uv run python main.py --pkce
 ```
 
-## Authentication Flows
+## How It Works
 
-### Confidential Client Flow (with client_secret)
+### Component Interaction Flow
+
+1. **Identity Provider starts** on port 8000 and waits for authentication requests
+2. **MCP Client starts** and initiates the OAuth2 flow:
+   - Generates PKCE challenge (if using public client)
+   - Requests authorization code from Identity Provider
+   - Receives authorization code via redirect
+   - Exchanges authorization code for JWT access token
+3. **MCP Client spawns MCP Server** as a subprocess using stdio transport
+4. **MCP Client connects to MCP Server** and calls tools:
+   - Passes JWT token as a parameter to authenticated tools
+   - MCP Server validates the token by fetching JWKS from Identity Provider
+   - MCP Server extracts user information from validated token
+   - Returns results to the client
+
+### Authentication Flows
+
+#### Confidential Client Flow (with client_secret)
 
 1. Client initiates authorization request
 2. Identity provider issues authorization code
@@ -115,7 +132,7 @@ uv run python main.py --pkce
 - Client ID: `confidential-client-id`
 - Client Secret: `confidential-client-secret`
 
-### Public Client Flow (with PKCE)
+#### Public Client Flow (with PKCE)
 
 1. Client generates PKCE code verifier and challenge
 2. Client initiates authorization request with code challenge
@@ -141,6 +158,15 @@ When you run the MCP client, it will:
 
 ## Example Output
 
+When you run the MCP client with confidential client authentication:
+
+```bash
+cd mcp-client
+uv run python main.py
+```
+
+You'll see output like this:
+
 ```
 ======================================================================
 MCP Client - OAuth2 Authorization Code Flow Demo
@@ -152,10 +178,10 @@ Authentication method: Client Secret (Confidential Client)
 
 Authorization URL: http://localhost:8000/oauth2/v2.0/authorize?client_id=...
 Simulating authorization flow...
-✓ Received authorization code: abc123...
+✓ Received authorization code: RhRDOk86w2FozAtifs7Z...
 
 Exchanging authorization code for access token...
-✓ Received access token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImRlZmF1bHQta2V5LWlkIn0...
+✓ Received access token: eyJhbGciOiJSUzI1NiIsImtpZCI6ImRlZmF1bHQta2V5LWlkIi...
 
 ✓ Successfully acquired access token!
 
@@ -170,7 +196,14 @@ Exchanging authorization code for access token...
 Result: Hello, OAuth2 Demo! This message is from an authenticated MCP server.
 
 --- Calling get_user_info tool ---
-Result: {'user_id': 'demo-user', 'name': 'Demo User demo-user', 'email': 'demo-user@example.com', ...}
+Result: {
+  "user_id": "demo-user",
+  "name": "Demo User demo-user",
+  "email": "demo-user@example.com",
+  "preferred_username": "demo-user",
+  "scope": "openid profile",
+  "tenant_id": "12345678-1234-1234-1234-123456789012"
+}
 
 --- Calling echo tool ---
 Result: [Authenticated as Demo User demo-user] Echo: This is a test message!
@@ -178,6 +211,24 @@ Result: [Authenticated as Demo User demo-user] Echo: This is a test message!
 ======================================================================
 Demo completed successfully!
 ======================================================================
+```
+
+When you run with PKCE (public client):
+
+```bash
+cd mcp-client
+uv run python main.py --pkce
+```
+
+You'll see similar output but with PKCE-specific information:
+
+```
+Authentication method: PKCE (Public Client)
+
+=== Acquiring token with PKCE (Public Client) ===
+✓ Generated PKCE code verifier: qUy8XdJLYaE9cX3NPYe4...
+✓ Generated PKCE code challenge: UI26-pOmmj8N3p7bEjOc...
+...
 ```
 
 ## API Endpoints (Identity Provider)
@@ -209,6 +260,9 @@ Extracts user information from a JWT token.
 **Arguments:**
 - `auth_token` (required): JWT access token
 
+**Returns:**
+User information including user_id, name, email, preferred_username, scope, and tenant_id
+
 ### echo
 Echoes a message with authenticated user context.
 
@@ -216,10 +270,8 @@ Echoes a message with authenticated user context.
 - `message` (required): Message to echo
 - `auth_token` (required): JWT access token
 
-## MCP Server Resources
-
-### user://profile
-User profile resource that requires authentication token.
+**Returns:**
+The echoed message prefixed with the authenticated user's name
 
 ## Technical Details
 
