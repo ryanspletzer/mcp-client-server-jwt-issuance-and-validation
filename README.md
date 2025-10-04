@@ -2,9 +2,13 @@
 
 A comprehensive demonstration of OAuth2/OIDC authentication flow with MCP (Model Context Protocol) integration. This project consists of three components that work together to simulate a complete authentication and authorization workflow similar to Microsoft Entra ID (formerly Azure AD).
 
+> **🚀 Quick Start**: See [QUICKSTART.md](QUICKSTART.md) for a 5-minute getting started guide.
+
 ## Architecture
 
 The project includes three independent components:
+
+> **📐 Architecture Details**: See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed diagrams and flow charts.
 
 1. **Identity Provider** (`identity-provider/`) - OAuth2/OIDC server that emulates Entra ID
    - Authorization Code Flow support
