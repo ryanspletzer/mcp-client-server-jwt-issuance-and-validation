@@ -24,7 +24,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import main
 
-REDIRECT_URI = "https://client.example.com/callback"
+# Must be one of the redirect URIs registered in main.REGISTERED_REDIRECT_URIS
+REDIRECT_URI = "http://localhost:9999/callback"
 
 
 @pytest.fixture()
@@ -83,7 +84,7 @@ def test_discovery_document(client: TestClient):
     assert data["jwks_uri"] == f"{main.ISSUER}/discovery/v2.0/keys"
     assert "code" in data["response_types_supported"]
     assert set(data["grant_types_supported"]) == {"authorization_code", "refresh_token"}
-    assert set(data["code_challenge_methods_supported"]) == {"S256", "plain"}
+    assert set(data["code_challenge_methods_supported"]) == {"S256"}
     assert "RS256" in data["id_token_signing_alg_values_supported"]
 
 
@@ -226,6 +227,35 @@ def test_authorize_unsupported_response_type_returns_400(client: TestClient):
             "client_id": main.CLIENT_ID_CONFIDENTIAL,
             "redirect_uri": REDIRECT_URI,
             "response_type": "token",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+
+
+def test_authorize_unregistered_redirect_uri_returns_400(client: TestClient):
+    resp = client.get(
+        "/oauth2/v2.0/authorize",
+        params={
+            "client_id": main.CLIENT_ID_CONFIDENTIAL,
+            "redirect_uri": "https://attacker.example.com/steal-codes",
+            "response_type": "code",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+
+
+def test_authorize_plain_code_challenge_method_returns_400(client: TestClient):
+    _verifier, challenge = _make_pkce_pair()
+    resp = client.get(
+        "/oauth2/v2.0/authorize",
+        params={
+            "client_id": main.CLIENT_ID_PUBLIC,
+            "redirect_uri": REDIRECT_URI,
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "plain",
         },
         follow_redirects=False,
     )

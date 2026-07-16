@@ -266,6 +266,11 @@ mcp-client-server-jwt-issuance-and-validation/
 8. **Code Expiration**: Authorization codes expire in 10 minutes
 9. **Refresh Token Binding**: The `refresh_token` grant revalidates `client_id` (and `client_secret`
    for the confidential client) before issuing a new access token
+10. **Registered Redirect URIs**: Authorization codes are only sent to redirect URIs pre-registered
+    for the requesting client, as real identity providers require
+11. **S256-only PKCE**: The `plain` code-challenge method (removed in OAuth 2.1) is rejected
+12. **Constant-Time Comparisons**: Client secrets and PKCE challenges are compared with
+    `secrets.compare_digest` to avoid timing side channels
 
 ## Educational Purpose
 

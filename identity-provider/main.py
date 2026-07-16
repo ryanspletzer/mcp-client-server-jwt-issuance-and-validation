@@ -32,6 +32,13 @@ CLIENT_ID_CONFIDENTIAL = "confidential-client-id"
 CLIENT_SECRET = "confidential-client-secret"  # noqa: S105 — intentional demo credential, see README
 CLIENT_ID_PUBLIC = "public-client-id"
 
+# Redirect URIs must be pre-registered per client, as real identity providers
+# (including Entra ID) require. Codes are only ever sent to these locations.
+REGISTERED_REDIRECT_URIS: dict[str, set[str]] = {
+    CLIENT_ID_CONFIDENTIAL: {"http://localhost:9999/callback"},
+    CLIENT_ID_PUBLIC: {"http://localhost:9999/callback"},
+}
+
 # In-memory stores
 authorization_codes: dict[str, dict[str, Any]] = {}
 refresh_tokens: dict[str, dict[str, Any]] = {}
@@ -75,18 +82,17 @@ class TokenResponse(BaseModel):
     scope: str | None = None
 
 
-def verify_pkce(
-    code_verifier: str, code_challenge: str, code_challenge_method: str = "S256"
-) -> bool:
-    """Verify PKCE code verifier against code challenge"""
-    if code_challenge_method == "S256":
-        computed_challenge = base64.urlsafe_b64encode(
-            hashlib.sha256(code_verifier.encode()).digest()
-        ).decode().rstrip('=')
-        return computed_challenge == code_challenge
-    elif code_challenge_method == "plain":
-        return code_verifier == code_challenge
-    return False
+def verify_pkce(code_verifier: str, code_challenge: str) -> bool:
+    """Verify a PKCE code verifier against its S256 code challenge.
+
+    Only S256 is supported; the `plain` method was removed in OAuth 2.1.
+    The comparison is constant-time to avoid leaking how much of the
+    challenge matched.
+    """
+    computed_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode()).digest()
+    ).decode().rstrip('=')
+    return secrets.compare_digest(computed_challenge, code_challenge)
 
 
 def create_jwt_token(user_id: str, client_id: str, scope: str = "openid profile") -> str:
@@ -127,7 +133,7 @@ async def openid_configuration():
         "claims_supported": [
             "sub", "iss", "aud", "exp", "iat", "name", "email", "preferred_username",
         ],
-        "code_challenge_methods_supported": ["S256", "plain"],
+        "code_challenge_methods_supported": ["S256"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
     }
 
@@ -157,6 +163,15 @@ async def authorize(
     # We only support the authorization code flow
     if response_type != "code":
         raise HTTPException(status_code=400, detail="Unsupported response_type")
+
+    # Only pre-registered redirect URIs may receive authorization codes;
+    # accepting arbitrary URIs would let an attacker steer codes anywhere.
+    if redirect_uri not in REGISTERED_REDIRECT_URIS[client_id]:
+        raise HTTPException(status_code=400, detail="Unregistered redirect_uri")
+
+    # Only the S256 challenge method is supported (plain was removed in OAuth 2.1)
+    if code_challenge is not None and code_challenge_method != "S256":
+        raise HTTPException(status_code=400, detail="Unsupported code_challenge_method")
 
     # For demo purposes, auto-approve with a dummy user
     # In a real system, this would show a login page
@@ -222,8 +237,8 @@ async def token(
 
         # Validate client authentication
         if client_id == CLIENT_ID_CONFIDENTIAL:
-            # Confidential client requires client_secret
-            if client_secret != CLIENT_SECRET:
+            # Confidential client requires client_secret (constant-time compare)
+            if not secrets.compare_digest(client_secret or "", CLIENT_SECRET):
                 raise HTTPException(status_code=401, detail="Invalid client credentials")
 
             # Per RFC 7636, if a code_challenge was bound to this authorization
@@ -233,11 +248,7 @@ async def token(
                 if not code_verifier:
                     raise HTTPException(status_code=400, detail="code_verifier is required")
 
-                if not verify_pkce(
-                    code_verifier,
-                    auth_data["code_challenge"],
-                    auth_data.get("code_challenge_method", "S256"),
-                ):
+                if not verify_pkce(code_verifier, auth_data["code_challenge"]):
                     raise HTTPException(status_code=400, detail="Invalid code_verifier")
         else:
             # Public client requires PKCE
@@ -247,11 +258,7 @@ async def token(
             if not code_verifier:
                 raise HTTPException(status_code=400, detail="code_verifier is required")
 
-            if not verify_pkce(
-                code_verifier,
-                auth_data["code_challenge"],
-                auth_data.get("code_challenge_method", "S256"),
-            ):
+            if not verify_pkce(code_verifier, auth_data["code_challenge"]):
                 raise HTTPException(status_code=400, detail="Invalid code_verifier")
 
         # Issue tokens
@@ -292,7 +299,9 @@ async def token(
         if client_id != refresh_data["client_id"]:
             raise HTTPException(status_code=401, detail="Client ID mismatch")
 
-        if refresh_data["client_id"] == CLIENT_ID_CONFIDENTIAL and client_secret != CLIENT_SECRET:
+        if refresh_data["client_id"] == CLIENT_ID_CONFIDENTIAL and not secrets.compare_digest(
+            client_secret or "", CLIENT_SECRET
+        ):
             raise HTTPException(status_code=401, detail="Invalid client credentials")
 
         if datetime.now(UTC) > refresh_data["expires_at"]:

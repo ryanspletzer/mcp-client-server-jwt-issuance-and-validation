@@ -337,8 +337,10 @@ The identity provider issues JWT tokens with the following claims:
 The PKCE implementation uses:
 
 - Code verifier: 43-character random string (base64url-encoded)
-- Code challenge method: S256 (SHA-256 hash)
+- Code challenge method: S256 (SHA-256 hash) —
+  the only supported method, since `plain` was removed in OAuth 2.1
 - Code challenge: base64url(SHA256(code_verifier))
+- Verifier comparison: constant-time (`secrets.compare_digest`)
 
 ### Security Features
 
@@ -355,6 +357,12 @@ The PKCE implementation uses:
 - Refresh tokens bound to the client they were issued to; the `refresh_token` grant revalidates
   `client_id` (and `client_secret` for the confidential client) before issuing a new access token
 - Unsupported `response_type` values rejected by the authorization endpoint
+- Redirect URIs pre-registered per client;
+  authorization requests with an unregistered `redirect_uri` are rejected
+- Only the S256 PKCE code-challenge method is accepted
+  (`plain` was removed in OAuth 2.1)
+- Client secrets and PKCE challenges compared in constant time
+  (`secrets.compare_digest`)
 - Redirect parameters URL-encoded to prevent injection
 
 ## Project Structure
