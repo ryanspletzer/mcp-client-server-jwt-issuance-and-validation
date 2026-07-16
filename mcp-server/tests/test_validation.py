@@ -184,11 +184,20 @@ async def test_bad_signature_raises(keypair, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+def _tool_fn(tool):
+    """Return the underlying coroutine function for a FastMCP tool.
+
+    FastMCP 2.x wraps tools in FunctionTool objects exposing `.fn`;
+    FastMCP 3.x returns the original function unchanged.
+    """
+    return getattr(tool, "fn", tool)
+
+
 async def test_get_user_info_returns_claims_on_valid_token(keypair, monkeypatch):
     monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
     token = _mint_token(keypair["private_pem"], keypair["kid"])
 
-    result = await main.get_user_info.fn(auth_token=token)
+    result = await _tool_fn(main.get_user_info)(auth_token=token)
 
     assert result["user_id"] == "user-123"
     assert result["name"] == "Test User"
@@ -203,7 +212,7 @@ async def test_get_user_info_returns_error_on_invalid_token(keypair, monkeypatch
 
     monkeypatch.setattr(main, "get_jwks", fake_get_jwks)
 
-    result = await main.get_user_info.fn(auth_token=token)
+    result = await _tool_fn(main.get_user_info)(auth_token=token)
 
     assert "error" in result
     assert "No matching signing key found" in result["error"]
@@ -213,7 +222,7 @@ async def test_echo_returns_authenticated_message_on_valid_token(keypair, monkey
     monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
     token = _mint_token(keypair["private_pem"], keypair["kid"])
 
-    result = await main.echo.fn(message="hi there", auth_token=token)
+    result = await _tool_fn(main.echo)(message="hi there", auth_token=token)
 
     assert result == "[Authenticated as Test User] Echo: hi there"
 
@@ -222,6 +231,6 @@ async def test_echo_returns_auth_failure_message_on_invalid_token(keypair, monke
     monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
     token = _mint_token(keypair["private_pem"], keypair["kid"], expires_in=-3600)
 
-    result = await main.echo.fn(message="hi there", auth_token=token)
+    result = await _tool_fn(main.echo)(message="hi there", auth_token=token)
 
     assert result.startswith("Authentication failed: ")
