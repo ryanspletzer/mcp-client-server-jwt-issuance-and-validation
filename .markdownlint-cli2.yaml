@@ -1,0 +1,4 @@
+# markdownlint-cli2 runner configuration (rule config lives in .markdownlint.yaml)
+ignores:
+  - "**/.venv/**"
+  - "**/node_modules/**"

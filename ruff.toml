@@ -1,0 +1,23 @@
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "S",   # flake8-bandit
+    "SIM", # flake8-simplify
+    "C4",  # flake8-comprehensions
+    "RUF", # ruff-specific rules
+]
+
+[lint.per-file-ignores]
+"**/tests/*" = [
+    "S101", # assert is expected/idiomatic in test files
+    "S105", # tests use hardcoded demo credentials, not real secrets
+    "S106", # same as above, for keyword-argument-passed credentials
+]

@@ -5,7 +5,19 @@ description = "MCP Server with JWT token validation"
 requires-python = ">=3.12"
 dependencies = [
     "fastmcp>=0.6.0",
-    "python-jose[cryptography]>=3.3.0",
+    "python-jose[cryptography]>=3.4.0",
     "httpx>=0.28.0",
     "pydantic>=2.10.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "cryptography>=43.0.0",
+    "pytest-cov>=6.0.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]

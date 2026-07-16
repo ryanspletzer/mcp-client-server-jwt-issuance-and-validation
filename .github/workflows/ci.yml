@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [identity-provider, mcp-server, mcp-client]
+    defaults:
+      run:
+        working-directory: ${{ matrix.component }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Lint with ruff
+        run: uv run --with ruff ruff check .
+
+      - name: Run tests
+        run: uv run pytest -v --cov=main --cov-report=term-missing
+
+  e2e:
+    name: End-to-end tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-client
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Run e2e tests
+        run: uv run pytest -m e2e -v
+
+  audit:
+    name: Audit ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [identity-provider, mcp-server, mcp-client]
+    defaults:
+      run:
+        working-directory: ${{ matrix.component }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Run pip-audit
+        run: |
+          uv export --no-dev --format requirements-txt > /tmp/reqs.txt
+          # PYSEC-2026-1325 (ecdsa, transitive via python-jose) has no fixed
+          # release; upstream treats side-channel attacks as out of scope.
+          # This demo only uses RS256 (RSA), so the ecdsa code path is never
+          # exercised. Revisit if python-jose swaps or drops the dependency.
+          uv run --with pip-audit pip-audit -r /tmp/reqs.txt \
+            --ignore-vuln PYSEC-2026-1325
+
+  markdownlint:
+    name: Lint Markdown
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Run markdownlint-cli2
+        uses: DavidAnson/markdownlint-cli2-action@05f32210e84442804257b2a6f20b273450ec8265 # v19
+        with:
+          globs: '**/*.md'
