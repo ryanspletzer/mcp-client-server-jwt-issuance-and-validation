@@ -45,21 +45,25 @@ cd identity-provider
 uv run python main.py
 ```
 
-Keep this running. You should see:
-```
+Keep this running.
+You should see:
+
+```text
 INFO:     Uvicorn running on http://0.0.0.0:8000
 ```
 
 ### Terminal 2: Run the MCP Client
 
-**Option A: Test with Confidential Client (client_secret)**
+The client is built with argparse; run `uv run python main.py --help` to see all available options.
+
+#### Option A: Test with Confidential Client (client_secret)
 
 ```bash
 cd mcp-client
 uv run python main.py
 ```
 
-**Option B: Test with Public Client (PKCE)**
+#### Option B: Test with Public Client (PKCE)
 
 ```bash
 cd mcp-client
@@ -69,9 +73,12 @@ uv run python main.py --pkce
 ## What You'll See
 
 The client will:
+
 1. ✓ Acquire an access token from the Identity Provider
-2. ✓ Connect to the MCP Server (started automatically)
-3. ✓ Call three tools:
+2. ✓ Verify the `state` parameter on the redirect (CSRF protection) before trusting the
+   authorization code
+3. ✓ Connect to the MCP Server (started automatically)
+4. ✓ Call three tools:
    - `hello_world`: Simple greeting
    - `get_user_info`: Extract user info from JWT token
    - `echo`: Echo a message with authentication
@@ -79,11 +86,13 @@ The client will:
 ## Understanding the Flow
 
 ### Confidential Client (with client_secret)
+
 - Uses client_id: `confidential-client-id`
 - Uses client_secret: `confidential-client-secret`
 - Standard OAuth2 flow for server-to-server authentication
 
 ### Public Client (with PKCE)
+
 - Uses client_id: `public-client-id`
 - No client_secret (not secure for public clients)
 - Uses PKCE (Proof Key for Code Exchange) for enhanced security
@@ -107,14 +116,17 @@ curl http://localhost:8000/ | python -m json.tool
 ## Troubleshooting
 
 **Port 8000 already in use?**
+
 - Stop any other services using port 8000
 - Or modify the `ISSUER` variable in both identity-provider and mcp-server main.py files
 
 **MCP Server connection failed?**
+
 - Ensure the identity provider is running on port 8000
 - Check that all dependencies are installed (`uv sync` in each directory)
 
 **Import errors?**
+
 - Run `uv sync` in the relevant component directory
 - Ensure you're using Python 3.12 or higher
 
@@ -124,6 +136,8 @@ curl http://localhost:8000/ | python -m json.tool
 - Experiment with modifying the token claims in `identity-provider/main.py`
 - Add your own MCP tools to `mcp-server/main.py`
 - Explore token expiration and refresh token flows
+- Run each component's test suite with `uv run pytest` (see the Development section in
+  [README.md](README.md))
 
 ## Learn More
 
