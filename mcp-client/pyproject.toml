@@ -12,7 +12,12 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
+    "pytest-cov>=6.0.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+addopts = "-m 'not e2e'"
+markers = [
+    "e2e: end-to-end tests that launch a real identity provider process and hit real network/stdio, run via `uv run pytest -m e2e`",
+]

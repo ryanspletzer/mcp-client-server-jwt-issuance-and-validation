@@ -21,7 +21,7 @@ from mcp.client.stdio import stdio_client
 ISSUER = "http://localhost:8000"
 DISCOVERY_URL = f"{ISSUER}/.well-known/openid-configuration"
 CLIENT_ID_CONFIDENTIAL = "confidential-client-id"
-CLIENT_SECRET = "confidential-client-secret"
+CLIENT_SECRET = "confidential-client-secret"  # noqa: S105 — intentional demo credential, see README
 CLIENT_ID_PUBLIC = "public-client-id"
 REDIRECT_URI = "http://localhost:9999/callback"
 SCOPE = "openid profile"
@@ -181,37 +181,39 @@ async def connect_to_mcp_server(access_token: str):
 
     print("✓ Starting MCP server via stdio...")
 
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            print("✓ Connected to MCP server")
+    async with (
+        stdio_client(server_params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        print("✓ Connected to MCP server")
 
-            # Initialize the session
-            await session.initialize()
-            print("✓ Session initialized")
+        # Initialize the session
+        await session.initialize()
+        print("✓ Session initialized")
 
-            # List available tools
-            tools = await session.list_tools()
-            print(f"\n✓ Available tools: {[tool.name for tool in tools.tools]}")
+        # List available tools
+        tools = await session.list_tools()
+        print(f"\n✓ Available tools: {[tool.name for tool in tools.tools]}")
 
-            # Call hello_world tool
-            print("\n--- Calling hello_world tool ---")
-            result = await session.call_tool("hello_world", arguments={"name": "OAuth2 Demo"})
-            print(f"Result: {result.content}")
+        # Call hello_world tool
+        print("\n--- Calling hello_world tool ---")
+        result = await session.call_tool("hello_world", arguments={"name": "OAuth2 Demo"})
+        print(f"Result: {result.content}")
 
-            # Call get_user_info tool with token
-            print("\n--- Calling get_user_info tool ---")
-            result = await session.call_tool(
-                "get_user_info", arguments={"auth_token": access_token}
-            )
-            print(f"Result: {result.content}")
+        # Call get_user_info tool with token
+        print("\n--- Calling get_user_info tool ---")
+        result = await session.call_tool(
+            "get_user_info", arguments={"auth_token": access_token}
+        )
+        print(f"Result: {result.content}")
 
-            # Call echo tool with token
-            print("\n--- Calling echo tool ---")
-            result = await session.call_tool("echo", arguments={
-                "message": "This is a test message!",
-                "auth_token": access_token
-            })
-            print(f"Result: {result.content}")
+        # Call echo tool with token
+        print("\n--- Calling echo tool ---")
+        result = await session.call_tool("echo", arguments={
+            "message": "This is a test message!",
+            "auth_token": access_token
+        })
+        print(f"Result: {result.content}")
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -253,7 +255,7 @@ async def main():
         print("=" * 70)
 
     except Exception as e:
-        print(f"\n✗ Error: {str(e)}", file=sys.stderr)
+        print(f"\n✗ Error: {e!s}", file=sys.stderr)
         import traceback
         traceback.print_exc()
         sys.exit(1)

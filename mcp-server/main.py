@@ -81,7 +81,7 @@ async def validate_token(token: str) -> dict[str, Any]:
         return claims
 
     except JWTError as e:
-        raise ValueError(f"Token validation failed: {str(e)}") from e
+        raise ValueError(f"Token validation failed: {e!s}") from e
 
 
 # Create FastMCP server with authentication
@@ -145,7 +145,7 @@ async def echo(message: str, auth_token: str) -> str:
         user_name = claims.get("name", "Unknown User")
         return f"[Authenticated as {user_name}] Echo: {message}"
     except ValueError as e:
-        return f"Authentication failed: {str(e)}"
+        return f"Authentication failed: {e!s}"
 
 
 def main():

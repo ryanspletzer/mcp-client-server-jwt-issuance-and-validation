@@ -29,7 +29,7 @@ from pydantic import BaseModel
 ISSUER = "http://localhost:8000"
 TENANT_ID = "12345678-1234-1234-1234-123456789012"
 CLIENT_ID_CONFIDENTIAL = "confidential-client-id"
-CLIENT_SECRET = "confidential-client-secret"
+CLIENT_SECRET = "confidential-client-secret"  # noqa: S105 — intentional demo credential, see README
 CLIENT_ID_PUBLIC = "public-client-id"
 
 # In-memory stores
@@ -69,7 +69,7 @@ app = FastAPI(title="Identity Provider", description="OAuth2/OIDC Identity Provi
 # Models
 class TokenResponse(BaseModel):
     access_token: str
-    token_type: str = "Bearer"
+    token_type: str = "Bearer"  # noqa: S105 — OAuth2 token type literal, not a credential
     expires_in: int
     refresh_token: str | None = None
     scope: str | None = None
@@ -271,7 +271,7 @@ async def token(
 
         return TokenResponse(
             access_token=access_token,
-            token_type="Bearer",
+            token_type="Bearer",  # noqa: S106 — OAuth2 token type literal, not a credential
             expires_in=3600,
             refresh_token=refresh_token_value,
             scope=auth_data["scope"],
@@ -306,7 +306,7 @@ async def token(
 
         return TokenResponse(
             access_token=access_token,
-            token_type="Bearer",
+            token_type="Bearer",  # noqa: S106 — OAuth2 token type literal, not a credential
             expires_in=3600,
             scope=refresh_data["scope"],
         )
@@ -336,7 +336,7 @@ async def root():
 
 
 def main():
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)  # noqa: S104 — intentional demo bind-all, see README
 
 
 if __name__ == "__main__":

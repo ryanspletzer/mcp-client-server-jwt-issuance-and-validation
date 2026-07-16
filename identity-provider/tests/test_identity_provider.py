@@ -22,7 +22,7 @@ from jose import jwt as jose_jwt
 # pytest was invoked.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import main  # noqa: E402
+import main
 
 REDIRECT_URI = "https://client.example.com/callback"
 
@@ -146,7 +146,7 @@ def test_public_client_pkce_happy_path(client: TestClient):
 
 
 def test_public_client_wrong_verifier_returns_400(client: TestClient):
-    verifier, challenge = _make_pkce_pair()
+    _verifier, challenge = _make_pkce_pair()
     code = _get_auth_code(
         client, main.CLIENT_ID_PUBLIC, code_challenge=challenge, code_challenge_method="S256"
     )
