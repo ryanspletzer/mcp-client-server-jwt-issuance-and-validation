@@ -32,6 +32,19 @@ CLIENT_ID_CONFIDENTIAL = "confidential-client-id"
 CLIENT_SECRET = "confidential-client-secret"  # noqa: S105 — intentional demo credential, see README
 CLIENT_ID_PUBLIC = "public-client-id"
 
+# Canonical resource identifier of the MCP server this demo protects, per
+# RFC 8707 (Resource Indicators for OAuth 2.0). This is the MCP server's
+# streamable-HTTP URL (see mcp-server/main.py). It must match the constant
+# of the same name in mcp-server/main.py and mcp-client/main.py exactly —
+# the three components are independent processes/packages in this demo, so
+# the value is kept in sync by convention rather than a shared import.
+MCP_RESOURCE = "http://localhost:8001/mcp"
+
+# RFC 8707 requires the authorization server to reject `resource` values it
+# doesn't recognize. In a real deployment this would be a dynamic client/
+# resource registry; here it's the single MCP server the demo protects.
+REGISTERED_RESOURCES: set[str] = {MCP_RESOURCE}
+
 # Redirect URIs must be pre-registered per client, as real identity providers
 # (including Entra ID) require. Codes are only ever sent to these locations.
 REGISTERED_REDIRECT_URIS: dict[str, set[str]] = {
@@ -95,13 +108,50 @@ def verify_pkce(code_verifier: str, code_challenge: str) -> bool:
     return secrets.compare_digest(computed_challenge, code_challenge)
 
 
-def create_jwt_token(user_id: str, client_id: str, scope: str = "openid profile") -> str:
-    """Create a JWT access token"""
+def validate_resource(resource: str | None) -> None:
+    """Validate an RFC 8707 `resource` parameter against the registry.
+
+    Per RFC 8707, an authorization server that receives a `resource` value
+    it doesn't recognize MUST reject the request. We use the `invalid_target`
+    error code the RFC defines for exactly this case.
+    """
+    if resource is not None and resource not in REGISTERED_RESOURCES:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "invalid_target",
+                "error_description": f"Unknown resource: {resource}",
+            },
+        )
+
+
+def create_jwt_token(
+    user_id: str, client_id: str, scope: str = "openid profile", resource: str | None = None
+) -> str:
+    """Create a JWT access token.
+
+    `aud` (audience) is bound to `resource` — the MCP server the token is
+    for — rather than to `client_id`. This is the MCP spec's audience-binding
+    requirement: a resource server must only accept tokens minted for itself,
+    never tokens minted for some other resource or for the client that
+    obtained them. Accepting client-audience tokens at a resource server is
+    exactly the forbidden "token passthrough" anti-pattern the spec calls
+    out — it lets a token intended for one resource be replayed at another.
+
+    `azp` ("authorized party") still records which OAuth client the token
+    was issued to, independent of what resource it's bound to.
+
+    Real MCP clients always send `resource` (see mcp-client/main.py), so in
+    practice `aud` is always the resource. Plain OIDC clients that predate
+    RFC 8707 may not send it, though; for those we fall back to the old
+    aud=client_id behavior rather than breaking them outright.
+    """
     now = datetime.now(UTC)
+    audience = resource if resource is not None else client_id
     payload = {
         "iss": ISSUER,
         "sub": user_id,
-        "aud": client_id,
+        "aud": audience,
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(hours=1)).timestamp()),
         "scope": scope,
@@ -118,9 +168,18 @@ def create_jwt_token(user_id: str, client_id: str, scope: str = "openid profile"
     return token
 
 
-@app.get("/.well-known/openid-configuration")
-async def openid_configuration():
-    """OIDC Discovery endpoint"""
+def _metadata_document() -> dict[str, Any]:
+    """Build the authorization server metadata document.
+
+    Shared by the OIDC discovery endpoint (/.well-known/openid-configuration)
+    and the RFC 8414 OAuth 2.0 Authorization Server Metadata endpoint
+    (/.well-known/oauth-authorization-server) — both describe the same
+    server, so there's no reason to maintain two copies of the dict.
+
+    RFC 8707 (resource indicators) doesn't define any metadata fields of its
+    own beyond what's already here, so there's nothing resource-specific to
+    advertise.
+    """
     return {
         "issuer": ISSUER,
         "authorization_endpoint": f"{ISSUER}/oauth2/v2.0/authorize",
@@ -138,6 +197,24 @@ async def openid_configuration():
     }
 
 
+@app.get("/.well-known/openid-configuration")
+async def openid_configuration():
+    """OIDC Discovery endpoint"""
+    return _metadata_document()
+
+
+@app.get("/.well-known/oauth-authorization-server")
+async def oauth_authorization_server():
+    """RFC 8414 OAuth 2.0 Authorization Server Metadata endpoint.
+
+    MCP clients that aren't doing OIDC (just plain OAuth 2.1) discover the
+    authorization server via this well-known path rather than the OIDC one.
+    The document is identical to OIDC discovery — this server is both an
+    OIDC provider and a plain OAuth 2.1 authorization server.
+    """
+    return _metadata_document()
+
+
 @app.get("/discovery/v2.0/keys")
 async def jwks():
     """JSON Web Key Set endpoint"""
@@ -153,6 +230,7 @@ async def authorize(
     state: str | None = Query(None),
     code_challenge: str | None = Query(None),
     code_challenge_method: str | None = Query("S256"),
+    resource: str | None = Query(None),
 ):
     """Authorization endpoint - presents login form and issues authorization code"""
 
@@ -173,6 +251,10 @@ async def authorize(
     if code_challenge is not None and code_challenge_method != "S256":
         raise HTTPException(status_code=400, detail="Unsupported code_challenge_method")
 
+    # RFC 8707: reject resource values we don't recognize up front, before
+    # ever issuing a code for them.
+    validate_resource(resource)
+
     # For demo purposes, auto-approve with a dummy user
     # In a real system, this would show a login page
     user_id = "demo-user"
@@ -188,6 +270,7 @@ async def authorize(
         "user_id": user_id,
         "code_challenge": code_challenge,
         "code_challenge_method": code_challenge_method,
+        "resource": resource,
         "expires_at": datetime.now(UTC) + timedelta(minutes=10),
     }
 
@@ -209,8 +292,13 @@ async def token(
     client_secret: str | None = Form(None),
     code_verifier: str | None = Form(None),
     refresh_token_param: str | None = Form(None, alias="refresh_token"),
+    resource: str | None = Form(None),
 ):
     """Token endpoint - exchanges authorization code for access token"""
+
+    # RFC 8707: validate the resource on every grant type that accepts one,
+    # before touching any stored code/token state.
+    validate_resource(resource)
 
     if grant_type == "authorization_code":
         if not code:
@@ -261,8 +349,25 @@ async def token(
             if not verify_pkce(code_verifier, auth_data["code_challenge"]):
                 raise HTTPException(status_code=400, detail="Invalid code_verifier")
 
+        # RFC 8707: if `resource` was bound to the authorization code at the
+        # authorize step, the token request must not silently switch it to a
+        # different resource. A request that omits `resource` here falls
+        # back to whatever was bound at authorize time.
+        stored_resource = auth_data.get("resource")
+        if resource is not None and stored_resource is not None and resource != stored_resource:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "invalid_target",
+                    "error_description": "resource does not match the value sent to /authorize",
+                },
+            )
+        effective_resource = resource or stored_resource
+
         # Issue tokens
-        access_token = create_jwt_token(auth_data["user_id"], client_id, auth_data["scope"])
+        access_token = create_jwt_token(
+            auth_data["user_id"], client_id, auth_data["scope"], resource=effective_resource
+        )
         refresh_token_value = secrets.token_urlsafe(32)
 
         # Store refresh token
@@ -270,6 +375,7 @@ async def token(
             "client_id": client_id,
             "user_id": auth_data["user_id"],
             "scope": auth_data["scope"],
+            "resource": effective_resource,
             "expires_at": datetime.now(UTC) + timedelta(days=30),
         }
 
@@ -308,15 +414,49 @@ async def token(
             del refresh_tokens[refresh_token_param]
             raise HTTPException(status_code=400, detail="Refresh token expired")
 
+        # RFC 8707: same matching rule as the authorization_code grant - a
+        # resource supplied here must agree with whatever this refresh token
+        # was originally bound to.
+        stored_resource = refresh_data.get("resource")
+        if resource is not None and stored_resource is not None and resource != stored_resource:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "invalid_target",
+                    "error_description": (
+                        "resource does not match the value bound to this refresh token"
+                    ),
+                },
+            )
+        effective_resource = resource or stored_resource
+
         # Issue new access token
         access_token = create_jwt_token(
-            refresh_data["user_id"], refresh_data["client_id"], refresh_data["scope"]
+            refresh_data["user_id"],
+            refresh_data["client_id"],
+            refresh_data["scope"],
+            resource=effective_resource,
         )
+
+        # Refresh token rotation (OAuth 2.1): the used refresh token is
+        # single-use. Delete it and issue a fresh one bound to the same
+        # client/user/scope/resource, so a leaked-and-replayed old token is
+        # immediately worthless once the legitimate client has rotated.
+        del refresh_tokens[refresh_token_param]
+        new_refresh_token_value = secrets.token_urlsafe(32)
+        refresh_tokens[new_refresh_token_value] = {
+            "client_id": refresh_data["client_id"],
+            "user_id": refresh_data["user_id"],
+            "scope": refresh_data["scope"],
+            "resource": effective_resource,
+            "expires_at": datetime.now(UTC) + timedelta(days=30),
+        }
 
         return TokenResponse(
             access_token=access_token,
             token_type="Bearer",  # noqa: S106 — OAuth2 token type literal, not a credential
             expires_in=3600,
+            refresh_token=new_refresh_token_value,
             scope=refresh_data["scope"],
         )
 

@@ -319,3 +319,209 @@ def test_state_roundtrip_with_url_special_characters(client: TestClient):
 
     assert qs["state"] == [special_state]
     assert "code" in qs
+
+
+# ---------------------------------------------------------------------------
+# RFC 8414 authorization server metadata
+# ---------------------------------------------------------------------------
+
+
+def test_oauth_authorization_server_metadata_matches_oidc_discovery(client: TestClient):
+    oidc = client.get("/.well-known/openid-configuration")
+    rfc8414 = client.get("/.well-known/oauth-authorization-server")
+
+    assert rfc8414.status_code == 200
+    assert rfc8414.json() == oidc.json()
+
+
+# ---------------------------------------------------------------------------
+# RFC 8707 resource indicators
+# ---------------------------------------------------------------------------
+
+
+def test_authorize_rejects_unregistered_resource(client: TestClient):
+    resp = client.get(
+        "/oauth2/v2.0/authorize",
+        params={
+            "client_id": main.CLIENT_ID_CONFIDENTIAL,
+            "redirect_uri": REDIRECT_URI,
+            "response_type": "code",
+            "resource": "http://attacker.example.com/mcp",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error"] == "invalid_target"
+
+
+def test_token_rejects_unregistered_resource(client: TestClient):
+    code = _get_auth_code(client, main.CLIENT_ID_CONFIDENTIAL)
+    resp = _exchange_code(
+        client,
+        code,
+        main.CLIENT_ID_CONFIDENTIAL,
+        client_secret=main.CLIENT_SECRET,
+        resource="http://attacker.example.com/mcp",
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error"] == "invalid_target"
+
+
+def test_resource_accepted_and_binds_audience(client: TestClient):
+    """A registered `resource` sent to both /authorize and /token is
+    accepted, and the resulting access token's `aud` is the resource, not
+    the client_id — the MCP spec's audience-binding requirement."""
+    code = _get_auth_code(
+        client, main.CLIENT_ID_CONFIDENTIAL, resource=main.MCP_RESOURCE
+    )
+    resp = _exchange_code(
+        client,
+        code,
+        main.CLIENT_ID_CONFIDENTIAL,
+        client_secret=main.CLIENT_SECRET,
+        resource=main.MCP_RESOURCE,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+
+    jwks_keys = client.get("/discovery/v2.0/keys").json()["keys"]
+    decoded = jose_jwt.decode(
+        body["access_token"],
+        jwks_keys[0],
+        algorithms=["RS256"],
+        audience=main.MCP_RESOURCE,
+        issuer=main.ISSUER,
+    )
+    assert decoded["aud"] == main.MCP_RESOURCE
+    assert decoded["aud"] != main.CLIENT_ID_CONFIDENTIAL
+    assert decoded["azp"] == main.CLIENT_ID_CONFIDENTIAL
+
+
+def test_resource_omitted_falls_back_to_client_id_audience(client: TestClient):
+    """Plain OIDC clients that never send `resource` keep the pre-RFC-8707
+    behavior: `aud` defaults to client_id (already covered by
+    test_confidential_client_full_code_flow, asserted explicitly here too
+    for clarity)."""
+    code = _get_auth_code(client, main.CLIENT_ID_CONFIDENTIAL)
+    resp = _exchange_code(
+        client, code, main.CLIENT_ID_CONFIDENTIAL, client_secret=main.CLIENT_SECRET
+    )
+    assert resp.status_code == 200
+
+    jwks_keys = client.get("/discovery/v2.0/keys").json()["keys"]
+    decoded = jose_jwt.decode(
+        resp.json()["access_token"],
+        jwks_keys[0],
+        algorithms=["RS256"],
+        audience=main.CLIENT_ID_CONFIDENTIAL,
+        issuer=main.ISSUER,
+    )
+    assert decoded["aud"] == main.CLIENT_ID_CONFIDENTIAL
+
+
+def test_token_resource_must_match_authorize_resource(client: TestClient, monkeypatch):
+    """A resource bound at /authorize can't be swapped for a different
+    *registered* resource at /token - registering a second resource just
+    for this test, since the demo only registers one by default."""
+    other_resource = "http://localhost:8002/mcp"
+    monkeypatch.setattr(
+        main, "REGISTERED_RESOURCES", main.REGISTERED_RESOURCES | {other_resource}
+    )
+
+    code = _get_auth_code(client, main.CLIENT_ID_CONFIDENTIAL, resource=main.MCP_RESOURCE)
+    resp = _exchange_code(
+        client,
+        code,
+        main.CLIENT_ID_CONFIDENTIAL,
+        client_secret=main.CLIENT_SECRET,
+        resource=other_resource,
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error"] == "invalid_target"
+
+
+# ---------------------------------------------------------------------------
+# Refresh token rotation (OAuth 2.1)
+# ---------------------------------------------------------------------------
+
+
+def test_refresh_token_rotation_issues_new_token_and_invalidates_old(client: TestClient):
+    code = _get_auth_code(client, main.CLIENT_ID_CONFIDENTIAL)
+    first_token_body = _exchange_code(
+        client, code, main.CLIENT_ID_CONFIDENTIAL, client_secret=main.CLIENT_SECRET
+    ).json()
+    original_refresh_token = first_token_body["refresh_token"]
+
+    refresh_resp = client.post(
+        "/oauth2/v2.0/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": original_refresh_token,
+            "client_id": main.CLIENT_ID_CONFIDENTIAL,
+            "client_secret": main.CLIENT_SECRET,
+        },
+    )
+    assert refresh_resp.status_code == 200
+    refresh_body = refresh_resp.json()
+
+    new_refresh_token = refresh_body["refresh_token"]
+    assert new_refresh_token
+    assert new_refresh_token != original_refresh_token
+
+    # The old refresh token is single-use: replaying it must now fail.
+    replay_resp = client.post(
+        "/oauth2/v2.0/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": original_refresh_token,
+            "client_id": main.CLIENT_ID_CONFIDENTIAL,
+            "client_secret": main.CLIENT_SECRET,
+        },
+    )
+    assert replay_resp.status_code == 400
+
+    # The new refresh token works.
+    second_refresh_resp = client.post(
+        "/oauth2/v2.0/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": new_refresh_token,
+            "client_id": main.CLIENT_ID_CONFIDENTIAL,
+            "client_secret": main.CLIENT_SECRET,
+        },
+    )
+    assert second_refresh_resp.status_code == 200
+
+
+def test_refresh_token_rotation_preserves_resource_binding(client: TestClient):
+    code = _get_auth_code(
+        client, main.CLIENT_ID_CONFIDENTIAL, resource=main.MCP_RESOURCE
+    )
+    token_body = _exchange_code(
+        client,
+        code,
+        main.CLIENT_ID_CONFIDENTIAL,
+        client_secret=main.CLIENT_SECRET,
+        resource=main.MCP_RESOURCE,
+    ).json()
+
+    refresh_resp = client.post(
+        "/oauth2/v2.0/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": token_body["refresh_token"],
+            "client_id": main.CLIENT_ID_CONFIDENTIAL,
+            "client_secret": main.CLIENT_SECRET,
+        },
+    )
+    assert refresh_resp.status_code == 200
+
+    jwks_keys = client.get("/discovery/v2.0/keys").json()["keys"]
+    decoded = jose_jwt.decode(
+        refresh_resp.json()["access_token"],
+        jwks_keys[0],
+        algorithms=["RS256"],
+        audience=main.MCP_RESOURCE,
+        issuer=main.ISSUER,
+    )
+    assert decoded["aud"] == main.MCP_RESOURCE
