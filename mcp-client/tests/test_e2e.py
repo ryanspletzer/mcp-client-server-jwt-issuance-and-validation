@@ -104,7 +104,7 @@ def test_confidential_client_flow_end_to_end(identity_provider):
 
     # Prove the token is actually accepted by the MCP server, not just
     # well-formed.
-    asyncio.run(main.connect_to_mcp_server(access_token))
+    asyncio.run(main.connect_to_mcp_server_stdio(access_token))
 
 
 def test_pkce_flow_end_to_end(identity_provider):

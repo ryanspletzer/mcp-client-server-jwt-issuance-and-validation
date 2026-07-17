@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP Client Support Matrix — July 2026</title>
+<style>
+  :root {
+    --bg: #F7F9FA;
+    --surface: #FFFFFF;
+    --surface-2: #EEF3F5;
+    --ink: #18242E;
+    --ink-2: #4A5B68;
+    --ink-3: #7A8A96;
+    --line: #D9E2E7;
+    --accent: #0F6678;
+    --accent-ink: #0F6678;
+    --yes-bg: #E2F1E8; --yes-fg: #22663F;
+    --part-bg: #F6ECD8; --part-fg: #8A5D10;
+    --no-bg: #F7E3E1; --no-fg: #96352F;
+    --und-bg: #E9EEF1; --und-fg: #64747F;
+    --code-bg: #EDF2F4;
+    --shadow: 0 1px 2px rgba(24, 36, 46, 0.06), 0 4px 14px rgba(24, 36, 46, 0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101820;
+      --surface: #16212B;
+      --surface-2: #1C2935;
+      --ink: #DEE7ED;
+      --ink-2: #9DAEBB;
+      --ink-3: #6E8090;
+      --line: #263542;
+      --accent: #4CC3DB;
+      --accent-ink: #6BD2E8;
+      --yes-bg: #16362A; --yes-fg: #7ACB9C;
+      --part-bg: #3A2F17; --part-fg: #DFAE55;
+      --no-bg: #3C221F; --no-fg: #E08D85;
+      --und-bg: #222E38; --und-fg: #8B9CA8;
+      --code-bg: #1B2833;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 14px rgba(0,0,0,0.25);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #F7F9FA; --surface: #FFFFFF; --surface-2: #EEF3F5;
+    --ink: #18242E; --ink-2: #4A5B68; --ink-3: #7A8A96; --line: #D9E2E7;
+    --accent: #0F6678; --accent-ink: #0F6678;
+    --yes-bg: #E2F1E8; --yes-fg: #22663F;
+    --part-bg: #F6ECD8; --part-fg: #8A5D10;
+    --no-bg: #F7E3E1; --no-fg: #96352F;
+    --und-bg: #E9EEF1; --und-fg: #64747F;
+    --code-bg: #EDF2F4;
+    --shadow: 0 1px 2px rgba(24, 36, 46, 0.06), 0 4px 14px rgba(24, 36, 46, 0.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #101820; --surface: #16212B; --surface-2: #1C2935;
+    --ink: #DEE7ED; --ink-2: #9DAEBB; --ink-3: #6E8090; --line: #263542;
+    --accent: #4CC3DB; --accent-ink: #6BD2E8;
+    --yes-bg: #16362A; --yes-fg: #7ACB9C;
+    --part-bg: #3A2F17; --part-fg: #DFAE55;
+    --no-bg: #3C221F; --no-fg: #E08D85;
+    --und-bg: #222E38; --und-fg: #8B9CA8;
+    --code-bg: #1B2833;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 14px rgba(0,0,0,0.25);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.55;
+    margin: 0;
+    padding: 0;
+    font-size: 15px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 48px 28px 72px; }
+
+  header { border-bottom: 2px solid var(--ink); padding-bottom: 24px; margin-bottom: 32px; }
+  .eyebrow {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-size: clamp(26px, 4.5vw, 38px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 10px;
+    text-wrap: balance;
+  }
+  .subhead { color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 8px 20px;
+    margin-top: 16px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    color: var(--ink-3);
+  }
+
+  h2 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 44px 0 6px;
+    text-wrap: balance;
+  }
+  h2 + p.lede { color: var(--ink-2); margin: 0 0 18px; max-width: 72ch; }
+
+  /* Spec snapshot strip */
+  .spec-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 12px;
+    margin: 20px 0 0;
+  }
+  .spec-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+  }
+  .spec-card .ver {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent-ink);
+  }
+  .spec-card .tag {
+    display: inline-block;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 1px 7px;
+    border-radius: 999px;
+    margin-left: 8px;
+    vertical-align: 2px;
+  }
+  .tag.current { background: var(--yes-bg); color: var(--yes-fg); }
+  .tag.incoming { background: var(--part-bg); color: var(--part-fg); }
+  .tag.past { background: var(--und-bg); color: var(--und-fg); }
+  .spec-card p { margin: 6px 0 0; font-size: 13.5px; color: var(--ink-2); }
+
+  /* Matrix */
+  .table-scroller {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    margin-top: 18px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 900px;
+    font-size: 13px;
+  }
+  thead th {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    text-align: left;
+    padding: 12px 10px;
+    border-bottom: 2px solid var(--line);
+    background: var(--surface-2);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 10px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.client, thead th:first-child {
+    position: sticky;
+    left: 0;
+    background: var(--surface);
+    font-weight: 600;
+    white-space: normal;
+    min-width: 170px;
+    border-right: 1px solid var(--line);
+  }
+  thead th:first-child { background: var(--surface-2); z-index: 2; }
+  td.client .sub { display: block; font-weight: 400; font-size: 11.5px; color: var(--ink-3); }
+
+  .chip {
+    display: inline-block;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 999px;
+    line-height: 1.6;
+  }
+  .chip.y { background: var(--yes-bg); color: var(--yes-fg); }
+  .chip.p { background: var(--part-bg); color: var(--part-fg); }
+  .chip.n { background: var(--no-bg); color: var(--no-fg); }
+  .chip.u { background: var(--und-bg); color: var(--und-fg); }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 10px 18px;
+    margin: 14px 2px 0;
+    font-size: 12.5px; color: var(--ink-2);
+    align-items: center;
+  }
+
+  /* Client cards */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-top: 18px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+  }
+  .card h3 { margin: 0 0 2px; font-size: 15.5px; letter-spacing: -0.01em; }
+  .card .role {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px; color: var(--ink-3);
+    display: block; margin-bottom: 10px;
+  }
+  .card ul { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 13.5px; }
+  .card li { margin: 5px 0; }
+  .card li strong { color: var(--ink); font-weight: 600; }
+
+  code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.9em;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  .note {
+    background: var(--surface-2);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    padding: 14px 18px;
+    margin-top: 28px;
+    font-size: 13.5px;
+    color: var(--ink-2);
+  }
+  .note strong { color: var(--ink); }
+  footer {
+    margin-top: 40px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px;
+    color: var(--ink-3);
+  }
+  footer p { margin: 4px 0; }
+  a { color: var(--accent-ink); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Model Context Protocol · Compatibility Reference</p>
+    <h1>MCP Client Support Matrix</h1>
+    <p class="subhead">
+      Which major MCP clients support which parts of the specification — and where each one falls short.
+      Compiled from vendor documentation; the official per-client matrix at modelcontextprotocol.io has been retired.
+    </p>
+    <div class="meta-row">
+      <span>sources fetched 2026-07-16</span>
+      <span>current spec: 2025-11-25</span>
+      <span>next revision: 2026-07-28</span>
+    </div>
+  </header>
+
+  <h2>Where the spec stands</h2>
+  <p class="lede">Client gaps only make sense against the spec timeline. Three revisions matter right now.</p>
+  <div class="spec-strip">
+    <div class="spec-card">
+      <span class="ver">2025-06-18</span><span class="tag past">prior</span>
+      <p>Servers become OAuth resource servers: RFC 9728 discovery, RFC 8707 resource indicators, elicitation, structured tool output.</p>
+    </div>
+    <div class="spec-card">
+      <span class="ver">2025-11-25</span><span class="tag current">current</span>
+      <p>OIDC discovery for auth servers, Client ID Metadata Documents (CIMD) replace DCR as the recommended registration, icons, experimental tasks.</p>
+    </div>
+    <div class="spec-card">
+      <span class="ver">2026-07-28</span><span class="tag incoming">ships in 12 days</span>
+      <p>Largest revision since launch: stateless protocol (no <code>initialize</code>, no sessions), roots / sampling / logging deprecated, tasks move to an extension, DCR deprecated for CIMD.</p>
+    </div>
+  </div>
+
+  <h2>Support matrix</h2>
+  <p class="lede">
+    Per-feature support as documented by each vendor.
+    "Undocumented" means the vendor's own docs don't mention it — treated as unsupported, but flagged as inference rather than confirmed fact.
+  </p>
+  <div class="table-scroller">
+    <table>
+      <thead>
+        <tr>
+          <th>Client</th>
+          <th>stdio</th>
+          <th>Streamable HTTP</th>
+          <th>Tools</th>
+          <th>Resources</th>
+          <th>Prompts</th>
+          <th>Sampling</th>
+          <th>Elicitation</th>
+          <th>Roots</th>
+          <th>OAuth depth</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="client">Claude.ai / Claude Desktop<span class="sub">Anthropic — connectors</span></td>
+          <td><span class="chip p">desktop only</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip p">no subscriptions</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip n">no</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip y">discovery + DCR</span></td>
+        </tr>
+        <tr>
+          <td class="client">Claude Code<span class="sub">Anthropic — CLI / IDE</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip n">no</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">9728 + 8414 + DCR + CIMD</span></td>
+        </tr>
+        <tr>
+          <td class="client">ChatGPT<span class="sub">OpenAI — connectors / dev mode</span></td>
+          <td><span class="chip n">no</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip p">mode-limited</span></td>
+          <td><span class="chip p">Apps SDK only</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip y">CIMD-first + DCR</span></td>
+        </tr>
+        <tr>
+          <td class="client">Copilot Studio<span class="sub">Microsoft — custom agents</span></td>
+          <td><span class="chip n">no</span></td>
+          <td><span class="chip y">only transport</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip n">no</span></td>
+          <td><span class="chip n">no</span></td>
+          <td><span class="chip n">no</span></td>
+          <td><span class="chip n">no</span></td>
+          <td><span class="chip p">DCR or manual</span></td>
+        </tr>
+        <tr>
+          <td class="client">M365 Copilot<span class="sub">Microsoft — declarative agents</span></td>
+          <td><span class="chip n">no</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip u">unclear</span></td>
+          <td><span class="chip n">no</span></td>
+          <td><span class="chip n">no</span></td>
+          <td><span class="chip n">no</span></td>
+          <td><span class="chip n">no</span></td>
+          <td><span class="chip n">static reg. only</span></td>
+        </tr>
+        <tr>
+          <td class="client">VS Code<span class="sub">GitHub Copilot</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">"full spec" claimed</span></td>
+        </tr>
+        <tr>
+          <td class="client">Cursor<span class="sub">Anysphere</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip n">absent from own table</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">DCR + static</span></td>
+        </tr>
+        <tr>
+          <td class="client">Windsurf<span class="sub">Cognition — Cascade</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes (100 cap)</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip p">OAuth, DCR unverified</span></td>
+        </tr>
+        <tr>
+          <td class="client">Gemini CLI<span class="sub">Google</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip p">de-emphasized</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip y">DCR + Google ADC</span></td>
+        </tr>
+        <tr>
+          <td class="client">Amazon Q Developer<span class="sub">AWS — CLI / IDE</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip u">unclear</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip p">OAuth, details thin</span></td>
+        </tr>
+        <tr>
+          <td class="client">JetBrains<span class="sub">AI Assistant / Junie</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip y">yes</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip u">undocumented</span></td>
+          <td><span class="chip u">undocumented</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="legend">
+    <span><span class="chip y">yes</span> vendor-documented</span>
+    <span><span class="chip p">partial</span> supported with limits</span>
+    <span><span class="chip n">no</span> explicitly unsupported</span>
+    <span><span class="chip u">undocumented</span> absent from vendor docs (inference)</span>
+  </div>
+
+  <h2>The gaps that bite in practice</h2>
+  <p class="lede">Per-client quirks that matter more than the checkboxes.</p>
+  <div class="cards">
+    <div class="card">
+      <h3>ChatGPT</h3>
+      <span class="role">most restrictive mainstream client</span>
+      <ul>
+        <li><strong>Remote-only</strong> — no stdio anywhere in the product.</li>
+        <li>Outside web developer mode, connectors and deep research <strong>ignore your actual tools</strong>: servers must expose exactly two read-only tools named <code>search</code> and <code>fetch</code> in OpenAI's citation schema.</li>
+        <li>Full arbitrary tools require developer mode (Pro/Plus/Business/Enterprise/Edu, web only), with per-call write confirmation.</li>
+        <li>No prompts, sampling, elicitation, or roots on any surface.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Microsoft 365 Copilot</h3>
+      <span class="role">two paths, different rules</span>
+      <ul>
+        <li><strong>Copilot Studio</strong>: tools + resources only (no prompts); streamable HTTP is the only transport — SSE dropped August 2025; traffic routes through Power Platform connectors, so tenant DLP policies apply; DCR available.</li>
+        <li><strong>Declarative agents</strong>: tools only (plus MCP Apps widgets); heavyweight packaging via Agents Toolkit manifests; OAuth limited to clients statically pre-registered in the Teams developer portal — <strong>no DCR, no API-key auth</strong>.</li>
+        <li>No end-user "paste a URL" flow on either path.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Claude</h3>
+      <span class="role">no sampling on any surface</span>
+      <ul>
+        <li><strong>Sampling unsupported everywhere</strong> — the one notable Anthropic-side gap.</li>
+        <li>claude.ai web is remote-only; local stdio servers need Claude Desktop or Claude Code.</li>
+        <li>No resource subscriptions; ~150k-character tool-result cap and 300s timeout on hosted surfaces.</li>
+        <li>Claude Code is otherwise the most complete CLI: roots, elicitation, <code>list_changed</code> refresh, and the deepest auth stack surveyed (RFC 9728 + 8414 discovery, DCR, CIMD, pre-registered credentials).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Everyone else</h3>
+      <span class="role">quick hits</span>
+      <ul>
+        <li><strong>VS Code</strong> is the most spec-complete client, including sampling — which almost nobody else has.</li>
+        <li><strong>Cursor</strong> omits sampling from its own capability table.</li>
+        <li><strong>Windsurf</strong> caps at 100 tools across all servers.</li>
+        <li><strong>JetBrains</strong> documents essentially nothing beyond tools and transports.</li>
+        <li><strong>No client surveyed</strong> supports experimental tasks or the OAuth client-credentials extension yet.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>Building a server for maximum reach?</strong>
+    The intersection of all major clients is: streamable HTTP transport, tools as the only primitive, and OAuth with support for both dynamic and pre-registered clients.
+    Sampling and roots are barely supported anywhere — and both are deprecated in the 2026-07-28 revision — so they're safe to skip.
+    Elicitation and resources are worth shipping, but degrade gracefully where absent.
+  </div>
+
+  <footer>
+    <p>
+      Compiled 2026-07-16 from vendor documentation:
+      claude.com/docs/connectors · code.claude.com/docs · developers.openai.com · learn.microsoft.com (Copilot Studio, M365 extensibility) ·
+      code.visualstudio.com · cursor.com/docs · docs.devin.ai · google-gemini.github.io/gemini-cli · docs.aws.amazon.com/amazonq · jetbrains.com/help ·
+      modelcontextprotocol.io (spec, changelogs, extension matrix).
+    </p>
+    <p>
+      "Undocumented" cells are inferences from omission in vendor docs, not confirmed absences.
+      Known-unverified items: VS Code DCR/completions wording, Windsurf DCR, JetBrains beyond tools, Amazon Q resources, ChatGPT <code>list_changed</code> handling.
+    </p>
+  </footer>
+</div>
+</body>
+</html>

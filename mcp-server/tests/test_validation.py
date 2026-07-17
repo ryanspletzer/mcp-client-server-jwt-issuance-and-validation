@@ -1,5 +1,5 @@
 """
-Tests for JWT validation logic in main.py.
+Tests for JWT validation logic and auth wiring in main.py.
 
 All tests generate their own RSA keypair(s) and mint tokens locally, then
 monkeypatch main.jwks_cache / main.get_jwks so no real identity provider
@@ -48,11 +48,17 @@ def _mint_token(
     kid: str,
     *,
     sub: str = "user-123",
-    aud: str = "confidential-client-id",
+    aud: str = main.MCP_RESOURCE,
     issuer: str = main.ISSUER,
     expires_in: int = 3600,
 ) -> str:
-    """Mint a JWT signed with private_pem, headers carrying kid."""
+    """Mint a JWT signed with private_pem, headers carrying kid.
+
+    `aud` defaults to `main.MCP_RESOURCE` — the only audience this server
+    now accepts, since tokens are bound to the resource server rather than
+    to an OAuth client_id (see main.create_jwt_token's docstring analog in
+    identity-provider/main.py).
+    """
     now = int(time.time())
     claims = {
         "sub": sub,
@@ -60,7 +66,12 @@ def _mint_token(
         "iss": issuer,
         "iat": now,
         "exp": now + expires_in,
+        "azp": "confidential-client-id",
         "name": "Test User",
+        "email": f"{sub}@example.com",
+        "preferred_username": sub,
+        "scope": "openid profile",
+        "tid": "12345678-1234-1234-1234-123456789012",
     }
     return jwt.encode(claims, private_pem, algorithm="RS256", headers={"kid": kid})
 
@@ -86,6 +97,30 @@ def reset_jwks_cache():
     main.jwks_cache = original
 
 
+@pytest.fixture(autouse=True)
+def reset_stdio_claims_cache():
+    """Ensure each test starts with a clean stdio-mode claims cache.
+
+    get_current_claims() caches the validated claims for the process's
+    MCP_ACCESS_TOKEN on first use; without resetting this between tests, a
+    later test could see a cached identity from an earlier one instead of
+    validating its own token.
+    """
+    original = main._stdio_claims_cache
+    main._stdio_claims_cache = None
+    yield
+    main._stdio_claims_cache = original
+
+
+@pytest.fixture(autouse=True)
+def reset_transport_mode():
+    """Ensure each test starts in the default stdio transport mode."""
+    original = main._TRANSPORT_MODE
+    main._TRANSPORT_MODE = "stdio"
+    yield
+    main._TRANSPORT_MODE = original
+
+
 # ---------------------------------------------------------------------------
 # validate_token
 # ---------------------------------------------------------------------------
@@ -98,7 +133,7 @@ async def test_valid_token_returns_claims(keypair, monkeypatch):
     claims = await main.validate_token(token)
 
     assert claims["sub"] == "user-123"
-    assert claims["aud"] == "confidential-client-id"
+    assert claims["aud"] == main.MCP_RESOURCE
 
 
 async def test_wrong_kid_raises_no_matching_key(keypair, monkeypatch):
@@ -160,7 +195,19 @@ async def test_wrong_issuer_raises(keypair, monkeypatch):
 
 async def test_invalid_audience_raises(keypair, monkeypatch):
     monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
-    token = _mint_token(keypair["private_pem"], keypair["kid"], aud="some-other-client")
+    token = _mint_token(keypair["private_pem"], keypair["kid"], aud="some-other-resource")
+
+    with pytest.raises(ValueError, match="Invalid audience"):
+        await main.validate_token(token)
+
+
+async def test_client_audience_token_is_rejected(keypair, monkeypatch):
+    """A token whose `aud` is an OAuth client_id (the pre-MCP-spec shape,
+    and the forbidden "token passthrough" pattern the audience-binding
+    requirement exists to prevent) must be rejected, not just tokens with
+    some arbitrary wrong audience."""
+    monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
+    token = _mint_token(keypair["private_pem"], keypair["kid"], aud="confidential-client-id")
 
     with pytest.raises(ValueError, match="Invalid audience"):
         await main.validate_token(token)
@@ -180,7 +227,7 @@ async def test_bad_signature_raises(keypair, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Tool-level error paths (get_user_info / echo)
+# stdio-mode claims: MCP_ACCESS_TOKEN environment variable
 # ---------------------------------------------------------------------------
 
 
@@ -193,36 +240,65 @@ def _tool_fn(tool):
     return getattr(tool, "fn", tool)
 
 
+async def test_stdio_claims_missing_env_var_raises(monkeypatch):
+    monkeypatch.delenv("MCP_ACCESS_TOKEN", raising=False)
+
+    with pytest.raises(ValueError, match="MCP_ACCESS_TOKEN"):
+        await main.get_current_claims()
+
+
+async def test_stdio_claims_reads_and_caches_env_var(keypair, monkeypatch):
+    monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
+    token = _mint_token(keypair["private_pem"], keypair["kid"])
+    monkeypatch.setenv("MCP_ACCESS_TOKEN", token)
+
+    claims = await main.get_current_claims()
+    assert claims["sub"] == "user-123"
+
+    # Cached: even if the env var disappears, the second call still works.
+    monkeypatch.delenv("MCP_ACCESS_TOKEN", raising=False)
+    cached_claims = await main.get_current_claims()
+    assert cached_claims["sub"] == "user-123"
+
+
+async def test_stdio_claims_invalid_token_raises(monkeypatch):
+    monkeypatch.setenv("MCP_ACCESS_TOKEN", "not-a-real-jwt")
+
+    with pytest.raises(ValueError, match="Token validation failed"):
+        await main.get_current_claims()
+
+
+# ---------------------------------------------------------------------------
+# Tool-level error paths (get_user_info / echo), driven via MCP_ACCESS_TOKEN
+# ---------------------------------------------------------------------------
+
+
 async def test_get_user_info_returns_claims_on_valid_token(keypair, monkeypatch):
     monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
     token = _mint_token(keypair["private_pem"], keypair["kid"])
+    monkeypatch.setenv("MCP_ACCESS_TOKEN", token)
 
-    result = await _tool_fn(main.get_user_info)(auth_token=token)
+    result = await _tool_fn(main.get_user_info)()
 
     assert result["user_id"] == "user-123"
     assert result["name"] == "Test User"
 
 
-async def test_get_user_info_returns_error_on_invalid_token(keypair, monkeypatch):
-    monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
-    token = _mint_token(keypair["private_pem"], "unknown-kid")
+async def test_get_user_info_returns_error_on_invalid_token(monkeypatch):
+    monkeypatch.delenv("MCP_ACCESS_TOKEN", raising=False)
 
-    async def fake_get_jwks(force_refresh: bool = False):
-        return keypair["jwks"]
-
-    monkeypatch.setattr(main, "get_jwks", fake_get_jwks)
-
-    result = await _tool_fn(main.get_user_info)(auth_token=token)
+    result = await _tool_fn(main.get_user_info)()
 
     assert "error" in result
-    assert "No matching signing key found" in result["error"]
+    assert "MCP_ACCESS_TOKEN" in result["error"]
 
 
 async def test_echo_returns_authenticated_message_on_valid_token(keypair, monkeypatch):
     monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
     token = _mint_token(keypair["private_pem"], keypair["kid"])
+    monkeypatch.setenv("MCP_ACCESS_TOKEN", token)
 
-    result = await _tool_fn(main.echo)(message="hi there", auth_token=token)
+    result = await _tool_fn(main.echo)(message="hi there")
 
     assert result == "[Authenticated as Test User] Echo: hi there"
 
@@ -230,7 +306,89 @@ async def test_echo_returns_authenticated_message_on_valid_token(keypair, monkey
 async def test_echo_returns_auth_failure_message_on_invalid_token(keypair, monkeypatch):
     monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
     token = _mint_token(keypair["private_pem"], keypair["kid"], expires_in=-3600)
+    monkeypatch.setenv("MCP_ACCESS_TOKEN", token)
 
-    result = await _tool_fn(main.echo)(message="hi there", auth_token=token)
+    result = await _tool_fn(main.echo)(message="hi there")
 
     assert result.startswith("Authentication failed: ")
+
+
+async def test_user_profile_resource_returns_claims(keypair, monkeypatch):
+    monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
+    token = _mint_token(keypair["private_pem"], keypair["kid"])
+    monkeypatch.setenv("MCP_ACCESS_TOKEN", token)
+
+    profile = await _tool_fn(main.user_profile)()
+
+    assert profile["user_id"] == "user-123"
+    assert profile["name"] == "Test User"
+    assert profile["email"] == "user-123@example.com"
+    assert profile["preferred_username"] == "user-123"
+    assert profile["scope"] == "openid profile"
+    assert profile["tenant_id"] == "12345678-1234-1234-1234-123456789012"
+
+
+# ---------------------------------------------------------------------------
+# HTTP-mode claims: FastMCP access-token dependency
+# ---------------------------------------------------------------------------
+
+
+async def test_http_claims_reads_from_access_token_dependency(monkeypatch):
+    main._TRANSPORT_MODE = "http"
+    fake_claims = {"sub": "http-user", "name": "HTTP User"}
+
+    class _FakeAccessToken:
+        claims = fake_claims
+
+    monkeypatch.setattr(main, "get_access_token", lambda: _FakeAccessToken())
+
+    claims = await main.get_current_claims()
+    assert claims == fake_claims
+
+
+async def test_http_claims_missing_access_token_raises(monkeypatch):
+    main._TRANSPORT_MODE = "http"
+    monkeypatch.setattr(main, "get_access_token", lambda: None)
+
+    with pytest.raises(ValueError, match="No authenticated access token"):
+        await main.get_current_claims()
+
+
+# ---------------------------------------------------------------------------
+# JoseTokenVerifier (FastMCP HTTP auth integration)
+# ---------------------------------------------------------------------------
+
+
+async def test_jose_token_verifier_valid_token_returns_access_token(keypair, monkeypatch):
+    monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
+    token = _mint_token(keypair["private_pem"], keypair["kid"])
+
+    verifier = main.JoseTokenVerifier()
+    access_token = await verifier.verify_token(token)
+
+    assert access_token is not None
+    assert access_token.token == token
+    assert access_token.client_id == "confidential-client-id"
+    assert access_token.resource == main.MCP_RESOURCE
+    assert access_token.claims["sub"] == "user-123"
+    assert "openid" in access_token.scopes
+
+
+async def test_jose_token_verifier_invalid_token_returns_none(keypair, monkeypatch):
+    monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
+    token = _mint_token(keypair["private_pem"], keypair["kid"], expires_in=-3600)
+
+    verifier = main.JoseTokenVerifier()
+    access_token = await verifier.verify_token(token)
+
+    assert access_token is None
+
+
+async def test_jose_token_verifier_wrong_audience_returns_none(keypair, monkeypatch):
+    monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
+    token = _mint_token(keypair["private_pem"], keypair["kid"], aud="confidential-client-id")
+
+    verifier = main.JoseTokenVerifier()
+    access_token = await verifier.verify_token(token)
+
+    assert access_token is None
