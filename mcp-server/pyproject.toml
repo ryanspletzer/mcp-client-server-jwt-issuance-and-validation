@@ -5,7 +5,7 @@ description = "MCP Server with JWT token validation"
 requires-python = ">=3.12"
 dependencies = [
     "fastmcp>=3.4,<4",
-    "python-jose[cryptography]>=3.4.0",
+    "python-jose[cryptography]>=3.5.0",
     "httpx>=0.28.0",
     "pydantic>=2.10.0",
 ]
