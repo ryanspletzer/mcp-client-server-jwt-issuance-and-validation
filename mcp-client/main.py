@@ -18,7 +18,6 @@ import httpx
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
-from pydantic import AnyUrl
 
 # Configuration
 ISSUER = "http://localhost:8000"
@@ -295,7 +294,7 @@ async def _run_tool_demo(session: ClientSession) -> None:
     # Read the user://profile resource - the same validated identity as
     # get_user_info, but surfaced as an MCP resource instead of a tool call.
     print("\n--- Reading user://profile resource ---")
-    resource_result = await session.read_resource(AnyUrl("user://profile"))
+    resource_result = await session.read_resource("user://profile")
     print(f"Result: {resource_result.contents}")
 
 
