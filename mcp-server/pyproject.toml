@@ -14,7 +14,7 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
-    "cryptography>=43.0.0",
+    "cryptography>=50.0.1",
     "pytest-cov>=6.0.0",
 ]
 
