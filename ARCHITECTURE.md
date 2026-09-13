@@ -296,7 +296,7 @@ mode):
 2. **Signature and claims** - it verifies the RS256 signature against the matching key and checks the
    `iss` (issuer) and `exp` (expiration) claims.
 3. **Audience** - it checks the `aud` claim against its own resource identifier
-   (`http://localhost:8001/mcp`) using python-jose's built-in single-value `audience=` check.
+   (`http://localhost:8001/mcp`) using PyJWT's built-in single-value `audience=` check.
    This is the audience-binding requirement the MCP spec adds on top of plain OAuth 2.1: a
    resource server must reject tokens that weren't minted for it specifically, closing off the
    "token passthrough" pattern where a token for one resource gets replayed at another.
@@ -377,7 +377,7 @@ mcp-client-server-jwt-issuance-and-validation/
   RFC 9728 metadata
 - **MCP SDK** (>=1.27, <2): Model Context Protocol client library; pinned below 2.0 because that
   release targets the breaking 2026-07-28 spec revision
-- **python-jose** (>=3.4.0, for CVE fixes): JWT creation and validation
+- **pyjwt[crypto]** (>=2.14.0, for CVE fixes): JWT creation and validation
 - **httpx**: Async HTTP client
 - **uvicorn**: ASGI server
 - **uv**: Fast Python package manager

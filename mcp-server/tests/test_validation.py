@@ -8,11 +8,12 @@ or network access is required.
 
 import time
 
+import jwt
 import main
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from jose import jwk, jwt
+from jwt.algorithms import RSAAlgorithm
 
 
 def _generate_rsa_keypair():
@@ -36,7 +37,8 @@ def _generate_rsa_keypair():
 
 def _jwk_for(public_pem: str, kid: str) -> dict:
     """Build a JWKS-style key entry from a PEM public key."""
-    key_dict = jwk.construct(public_pem, algorithm="RS256").to_dict()
+    rsa_alg = RSAAlgorithm(RSAAlgorithm.SHA256)
+    key_dict = RSAAlgorithm.to_jwk(rsa_alg.prepare_key(public_pem), as_dict=True)
     key_dict["kid"] = kid
     key_dict["use"] = "sig"
     key_dict["alg"] = "RS256"
@@ -197,7 +199,7 @@ async def test_invalid_audience_raises(keypair, monkeypatch):
     monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
     token = _mint_token(keypair["private_pem"], keypair["kid"], aud="some-other-resource")
 
-    with pytest.raises(ValueError, match="Invalid audience"):
+    with pytest.raises(ValueError, match="Audience doesn't match"):
         await main.validate_token(token)
 
 
@@ -209,7 +211,7 @@ async def test_client_audience_token_is_rejected(keypair, monkeypatch):
     monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
     token = _mint_token(keypair["private_pem"], keypair["kid"], aud="confidential-client-id")
 
-    with pytest.raises(ValueError, match="Invalid audience"):
+    with pytest.raises(ValueError, match="Audience doesn't match"):
         await main.validate_token(token)
 
 
@@ -355,15 +357,15 @@ async def test_http_claims_missing_access_token_raises(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# JoseTokenVerifier (FastMCP HTTP auth integration)
+# PyJWTTokenVerifier (FastMCP HTTP auth integration)
 # ---------------------------------------------------------------------------
 
 
-async def test_jose_token_verifier_valid_token_returns_access_token(keypair, monkeypatch):
+async def test_pyjwt_token_verifier_valid_token_returns_access_token(keypair, monkeypatch):
     monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
     token = _mint_token(keypair["private_pem"], keypair["kid"])
 
-    verifier = main.JoseTokenVerifier()
+    verifier = main.PyJWTTokenVerifier()
     access_token = await verifier.verify_token(token)
 
     assert access_token is not None
@@ -374,21 +376,21 @@ async def test_jose_token_verifier_valid_token_returns_access_token(keypair, mon
     assert "openid" in access_token.scopes
 
 
-async def test_jose_token_verifier_invalid_token_returns_none(keypair, monkeypatch):
+async def test_pyjwt_token_verifier_invalid_token_returns_none(keypair, monkeypatch):
     monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
     token = _mint_token(keypair["private_pem"], keypair["kid"], expires_in=-3600)
 
-    verifier = main.JoseTokenVerifier()
+    verifier = main.PyJWTTokenVerifier()
     access_token = await verifier.verify_token(token)
 
     assert access_token is None
 
 
-async def test_jose_token_verifier_wrong_audience_returns_none(keypair, monkeypatch):
+async def test_pyjwt_token_verifier_wrong_audience_returns_none(keypair, monkeypatch):
     monkeypatch.setattr(main, "jwks_cache", keypair["jwks"])
     token = _mint_token(keypair["private_pem"], keypair["kid"], aud="confidential-client-id")
 
-    verifier = main.JoseTokenVerifier()
+    verifier = main.PyJWTTokenVerifier()
     access_token = await verifier.verify_token(token)
 
     assert access_token is None
