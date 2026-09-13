@@ -13,9 +13,9 @@ import sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import jwt
 import pytest
 from fastapi.testclient import TestClient
-from jose import jwt as jose_jwt
 
 # main.py lives one directory up from this test file (flat layout, no
 # package/__init__.py), so make sure it's importable regardless of how
@@ -118,9 +118,9 @@ def test_confidential_client_full_code_flow(client: TestClient):
     assert body["access_token"]
 
     jwks_keys = client.get("/discovery/v2.0/keys").json()["keys"]
-    decoded = jose_jwt.decode(
+    decoded = jwt.decode(
         body["access_token"],
-        jwks_keys[0],
+        jwt.PyJWK.from_dict(jwks_keys[0]).key,
         algorithms=["RS256"],
         audience=main.CLIENT_ID_CONFIDENTIAL,
         issuer=main.ISSUER,
@@ -385,9 +385,9 @@ def test_resource_accepted_and_binds_audience(client: TestClient):
     body = resp.json()
 
     jwks_keys = client.get("/discovery/v2.0/keys").json()["keys"]
-    decoded = jose_jwt.decode(
+    decoded = jwt.decode(
         body["access_token"],
-        jwks_keys[0],
+        jwt.PyJWK.from_dict(jwks_keys[0]).key,
         algorithms=["RS256"],
         audience=main.MCP_RESOURCE,
         issuer=main.ISSUER,
@@ -409,9 +409,9 @@ def test_resource_omitted_falls_back_to_client_id_audience(client: TestClient):
     assert resp.status_code == 200
 
     jwks_keys = client.get("/discovery/v2.0/keys").json()["keys"]
-    decoded = jose_jwt.decode(
+    decoded = jwt.decode(
         resp.json()["access_token"],
-        jwks_keys[0],
+        jwt.PyJWK.from_dict(jwks_keys[0]).key,
         algorithms=["RS256"],
         audience=main.CLIENT_ID_CONFIDENTIAL,
         issuer=main.ISSUER,
@@ -517,9 +517,9 @@ def test_refresh_token_rotation_preserves_resource_binding(client: TestClient):
     assert refresh_resp.status_code == 200
 
     jwks_keys = client.get("/discovery/v2.0/keys").json()["keys"]
-    decoded = jose_jwt.decode(
+    decoded = jwt.decode(
         refresh_resp.json()["access_token"],
-        jwks_keys[0],
+        jwt.PyJWK.from_dict(jwks_keys[0]).key,
         algorithms=["RS256"],
         audience=main.MCP_RESOURCE,
         issuer=main.ISSUER,

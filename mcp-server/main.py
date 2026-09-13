@@ -8,10 +8,10 @@ import os
 from typing import Any
 
 import httpx
+import jwt
 from fastmcp import FastMCP
 from fastmcp.server.auth import AccessToken, RemoteAuthProvider, TokenVerifier
 from fastmcp.server.dependencies import get_access_token
-from jose import JWTError, jwt
 from pydantic import AnyHttpUrl
 
 # Configuration
@@ -96,17 +96,17 @@ async def validate_token(token: str) -> dict[str, Any]:
             raise ValueError(f"No matching signing key found for kid {kid}")
 
         # This server has exactly one valid audience: its own resource
-        # identifier. python-jose's built-in `audience=` check enforces that
+        # identifier. PyJWT's built-in `audience=` check enforces that
         # directly, which is the MCP spec's audience-binding requirement in
         # practice — a token minted for some other resource (or bound only
-        # to an OAuth client_id, never a resource) is rejected by jose
+        # to an OAuth client_id, never a resource) is rejected by PyJWT
         # itself before we ever see the claims. That's what closes off the
         # "token passthrough" anti-pattern the spec forbids: this server
         # will not accept a token just because it's a validly-signed JWT
         # from the right issuer if it wasn't minted for *this* resource.
         claims = jwt.decode(
             token,
-            signing_key,
+            jwt.PyJWK.from_dict(signing_key).key,
             algorithms=["RS256"],
             issuer=ISSUER,
             audience=MCP_RESOURCE,
@@ -114,14 +114,14 @@ async def validate_token(token: str) -> dict[str, Any]:
 
         return claims
 
-    except JWTError as e:
+    except jwt.PyJWTError as e:
         raise ValueError(f"Token validation failed: {e!s}") from e
 
 
-class JoseTokenVerifier(TokenVerifier):
+class PyJWTTokenVerifier(TokenVerifier):
     """Adapts the hand-rolled `validate_token` above to FastMCP's HTTP auth.
 
-    The JWKS-fetch-and-jose-decode logic in `validate_token` stays the
+    The JWKS-fetch-and-PyJWT-decode logic in `validate_token` stays the
     teaching centerpiece of this server; this class just bridges it to the
     interface `RemoteAuthProvider` expects (`verify_token` returning a
     FastMCP `AccessToken` or None). It stashes the full claim set on
@@ -151,7 +151,7 @@ class JoseTokenVerifier(TokenVerifier):
 # in main() if --transport http is requested. In stdio mode `mcp.auth` stays
 # None, matching the original no-auth-object stdio behavior.
 _http_auth_provider = RemoteAuthProvider(
-    token_verifier=JoseTokenVerifier(),
+    token_verifier=PyJWTTokenVerifier(),
     authorization_servers=[AnyHttpUrl(ISSUER)],
     base_url=MCP_BASE_URL,
 )
@@ -190,7 +190,7 @@ async def get_current_claims() -> dict[str, Any]:
 
     Dispatches on which transport this process is running under so tools
     stay transport-agnostic:
-    - http: FastMCP's auth layer (JoseTokenVerifier, above) already
+    - http: FastMCP's auth layer (PyJWTTokenVerifier, above) already
       validated the Bearer token before the tool ran; we just read the
       claims it stashed on the current request's AccessToken.
     - stdio: there's no per-request auth layer, so we validate (and cache)

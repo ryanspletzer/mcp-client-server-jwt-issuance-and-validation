@@ -14,15 +14,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode
 
+import jwt
 import uvicorn
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI, Form, HTTPException, Query
 from fastapi.responses import RedirectResponse
-from jose import jwt
-from jose.backends.cryptography_backend import CryptographyRSAKey
-from jose.constants import ALGORITHMS
+from jwt.algorithms import RSAAlgorithm
 from pydantic import BaseModel
 
 # Configuration
@@ -76,9 +75,13 @@ public_key_pem = public_key_obj.public_bytes(
 ).decode('utf-8')
 
 # Precompute the JWK representation of the public key once at startup, since
-# the key never changes for the lifetime of the process.
-_jwk_key = CryptographyRSAKey(public_key_pem, ALGORITHMS.RS256)
-jwk_dict = _jwk_key.to_dict()
+# the key never changes for the lifetime of the process. Pass the
+# cryptography key object directly (rather than re-serializing to PEM and
+# back) since it's already at hand. RSAAlgorithm's constructor takes the
+# hash algorithm used for signing/verification (SHA-256, for RS256);
+# prepare_key/to_jwk don't depend on which hash was chosen here.
+_rsa_alg = RSAAlgorithm(RSAAlgorithm.SHA256)
+jwk_dict = RSAAlgorithm.to_jwk(_rsa_alg.prepare_key(public_key_obj), as_dict=True)
 jwk_dict['kid'] = 'default-key-id'
 jwk_dict['use'] = 'sig'
 jwk_dict['alg'] = 'RS256'
@@ -163,7 +166,7 @@ def create_jwt_token(
     }
 
     token = jwt.encode(
-        payload, private_key_pem, algorithm=ALGORITHMS.RS256, headers={"kid": "default-key-id"}
+        payload, private_key_pem, algorithm="RS256", headers={"kid": "default-key-id"}
     )
     return token
 

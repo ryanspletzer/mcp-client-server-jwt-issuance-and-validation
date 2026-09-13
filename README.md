@@ -460,7 +460,7 @@ a resource server must only accept tokens minted for itself.
 Accepting a token just because it's validly signed by the right issuer — without checking it was
 actually minted *for this resource* — is the "token passthrough" anti-pattern the spec forbids,
 since it would let a token intended for one resource be replayed at another.
-The MCP server enforces this with python-jose's built-in `audience=` check against its own
+The MCP server enforces this with PyJWT's built-in `audience=` check against its own
 resource identifier (`http://localhost:8001/mcp`), rejecting anything else outright.
 
 ### PKCE Implementation
@@ -510,12 +510,12 @@ The PKCE implementation uses:
 ├── identity-provider/
 │   ├── main.py               # OAuth2/OIDC server implementation
 │   ├── tests/                # pytest suite
-│   ├── pyproject.toml        # Dependencies (FastAPI, python-jose)
+│   ├── pyproject.toml        # Dependencies (FastAPI, PyJWT)
 │   └── .python-version
 ├── mcp-server/
 │   ├── main.py                # MCP server with JWT validation
 │   ├── tests/                 # pytest suite
-│   ├── pyproject.toml         # Dependencies (FastMCP, python-jose)
+│   ├── pyproject.toml         # Dependencies (FastMCP, PyJWT)
 │   └── .python-version
 ├── mcp-client/
 │   ├── main.py                # MCP client with OAuth2 flows
@@ -540,14 +540,14 @@ The PKCE implementation uses:
 
 - FastAPI: Web framework for OAuth2 endpoints
 - uvicorn: ASGI server
-- python-jose (>=3.4.0, for CVE fixes): JWT creation and validation
+- pyjwt[crypto] (>=2.14.0, for CVE fixes): JWT creation and validation
 - cryptography: RSA key generation and signing
 
 ### MCP Server
 
 - FastMCP (>=3.4, <4): MCP server framework; provides the `RemoteAuthProvider` / `TokenVerifier`
   machinery used for HTTP-mode auth and RFC 9728 metadata
-- python-jose (>=3.4.0, for CVE fixes): JWT validation
+- pyjwt[crypto] (>=2.14.0, for CVE fixes): JWT validation
 - httpx: HTTP client for JWKS fetching
 
 ### MCP Client
