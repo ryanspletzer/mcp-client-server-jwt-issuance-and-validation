@@ -2,8 +2,6 @@
 
 An educational three-component demo of OAuth2/OIDC token issuance and validation
 with MCP (Model Context Protocol) integration.
-`CLAUDE.md` in this repo is a symlink to this file;
-`AGENTS.md` is the canonical source.
 
 ## Layout
 
